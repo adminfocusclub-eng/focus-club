@@ -87,7 +87,7 @@ const VIEWS = {
     return `<div class="card hero"><div class="lbl">Club balance</div><div class="big">${fmt(t.bal)}</div>
       <div class="split"><div><small>Total income</small>${fmt(t.inc)}</div><div><small>Total expenses</small>${fmt(t.exp)}</div></div></div>
       <div class="stats"><div class="card"><b>${S.members.length}</b><small>Members</small></div><div class="card"><b>${paid.size}</b><small>Paid ${mLabel(m)}</small></div><div class="card"><b>${pending.length}</b><small>Pending</small></div></div>
-      <div class="card"><h2>Fee pending — ${mLabel(m)}</h2>
+      <div class="card"><h2 style="display:flex;justify-content:space-between;align-items:center;gap:8px">Fee pending — ${mLabel(m)}${pending.length > 1 ? `<button class="btn sm wa" onclick="openRemindAll()">📢 Remind all</button>` : ''}</h2>
       ${!S.members.length ? `<div class="empty">No members yet.<br><br><button class="btn" onclick="go('members');openMemberForm()">+ Add first member</button></div>`
         : !pending.length ? '<div class="empty">Everyone has paid this month 🎉</div>'
         : pending.map(x => `<div class="row">${avatar(x)}<div class="grow"><div class="t">${esc(x.name)}</div><div class="s">${x.code} · ${ph(x)}</div></div>
@@ -147,6 +147,29 @@ function memberList() {
   return list.length ? list.map(m => `<div class="row tap" onclick="openMember('${m.id}')">${avatar(m)}<div class="grow"><div class="t">${esc(m.name)}</div><div class="s">${m.code} · ${ph(m)}${m.role && m.role !== 'Member' ? ' · ' + esc(m.role) : ''}</div></div><span class="pill ${paid.has(m.id) ? 'ok' : 'due'}">${paid.has(m.id) ? 'Paid' : 'Due'}</span></div>`).join('')
     : `<div class="empty">${S.members.length ? 'No member matches your search.' : 'No members yet. Tap “+ Add”.'}</div>`;
 }
+
+/* ---------- Bulk reminders ---------- */
+let remList = [], remIdx = 0;
+const pendingNow = () => { const paid = paidSet(curMonth()); return S.members.filter(x => !paid.has(x.id)).sort((a, b) => a.name.localeCompare(b.name)); };
+const groupText = names => `*${S.settings.clubName}*\nMonthly membership reminder - ${mLabel(curMonth())}\n\n` + (names ? `The fee of ${fmt(S.settings.fee)} is pending for:\n${pendingNow().map((x, i) => `${i + 1}. ${x.name} (${x.code})`).join('\n')}\n\nKindly pay at the earliest.` : `Members who have not yet paid the monthly fee of ${fmt(S.settings.fee)} are requested to pay at the earliest.`) + ' Thank you! 🙏';
+function openRemindAll() {
+  const n = pendingNow().length;
+  showModal('Remind all — ' + n + ' pending', `<h3 style="margin:10px 0 4px;font-size:15px">1. One message to your group or broadcast list</h3>
+    <p class="hint" style="margin:0 0 8px">Opens WhatsApp with the reminder ready. Choose your club group or broadcast list and press send once.</p>
+    <div class="btns"><a class="btn wa" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(groupText(true))}">With names list</a><a class="btn ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(groupText(false))}">Without names</a></div>
+    <h3 style="margin:18px 0 4px;font-size:15px">2. Personal message to each member</h3>
+    <p class="hint" style="margin:0 0 8px">Sends each pending member their own reminder, one after another. Press send in WhatsApp, come back, and the next member is ready.</p>
+    <button class="btn block" onclick="startQueue()">Start one by one (${n})</button>`);
+}
+function startQueue() { remList = pendingNow(); remIdx = 0; showQueue(); }
+function showQueue() {
+  const x = remList[remIdx];
+  if (!x) return showModal('Reminders', `<div class="empty" style="font-size:17px">All ${remList.length} reminders done 🎉</div><button class="btn block" onclick="closeModal()">Close</button>`);
+  showModal(`Reminder ${remIdx + 1} of ${remList.length}`, `<div style="display:flex;gap:14px;align-items:center;margin:8px 0 14px">${avatar(x, 'lg')}<div><div style="font-size:19px;font-weight:700">${esc(x.name)}</div><div style="color:var(--mut)">${x.code} · ${ph(x)}</div></div></div>
+    <a class="btn wa block" target="_blank" rel="noopener" href="${wa(x.phone, remindText(x))}" onclick="setTimeout(nextInQueue, 600)">Send to ${esc(x.name.split(' ')[0])} on WhatsApp</a>
+    <div class="btns" style="margin-top:8px"><button class="btn ghost" onclick="nextInQueue()">Skip</button><button class="btn ghost" onclick="closeModal()">Stop</button></div>`);
+}
+function nextInQueue() { remIdx++; showQueue(); }
 
 /* ---------- Members ---------- */
 function openMember(id) {
