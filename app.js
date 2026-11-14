@@ -14,7 +14,10 @@ const dLabel = d => +d.slice(8, 10) + ' ' + MON[+d.slice(5, 7) - 1] + ' ' + d.sl
 const sum = a => a.reduce((t, x) => t + x.amount, 0);
 const initials = n => n.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const avatar = (m, cls = '') => m.photo ? `<img class="av ${cls}" src="${esc(m.photo)}" alt="">` : `<div class="av ${cls}">${esc(initials(m.name))}</div>`;
-const wa = (phone, text) => `https://wa.me/91${phone}?text=${encodeURIComponent(text)}`;
+const wa = (phone, text) => `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
+const ph = m => m.cc ? `+${m.cc} ${m.phone.slice(m.cc.length)}` : '+' + m.phone;
+const COUNTRIES = [['91', 'India'], ['971', 'UAE'], ['966', 'Saudi Arabia'], ['974', 'Qatar'], ['965', 'Kuwait'], ['968', 'Oman'], ['973', 'Bahrain'], ['60', 'Malaysia'], ['65', 'Singapore'], ['94', 'Sri Lanka'], ['44', 'UK'], ['1', 'USA / Canada'], ['61', 'Australia'], ['64', 'New Zealand'], ['49', 'Germany'], ['33', 'France'], ['39', 'Italy'], ['353', 'Ireland'], ['31', 'Netherlands'], ['41', 'Switzerland'], ['81', 'Japan'], ['82', 'South Korea'], ['86', 'China'], ['27', 'South Africa']];
+function pickCc(sel) { if (sel.value !== 'other') return; const c = (prompt('Enter the country code, numbers only (for example 20 for Egypt)') || '').replace(/\D/g, ''); if (c) { const o = new Option('+' + c, c); sel.add(o, sel.options.length - 1); sel.value = c; } else sel.value = '91'; }
 const val = id => ($('#' + id)?.value ?? '').trim();
 
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove('show'), 2600); }
@@ -45,10 +48,10 @@ function renderLogin() {
       <div class="seg"><button class="${a ? '' : 'on'}" onclick="loginRole='member';renderLogin()">Member</button><button class="${a ? 'on' : ''}" onclick="loginRole='admin';renderLogin()">Admin</button></div>
       <form onsubmit="doLogin(event)">
       ${a ? `<label for="pin">Admin PIN</label><input id="pin" type="password" inputmode="numeric" autocomplete="current-password" placeholder="Enter PIN">`
-          : `<label for="ph">Your registered mobile number</label><input id="ph" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile number">`}
+          : `<label for="ph">Your registered mobile number</label><input id="ph" type="tel" inputmode="numeric" autocomplete="tel" placeholder="Mobile number">`}
       <button class="btn block" style="margin-top:14px">Login</button></form>
       ${a && PUBLIC.defaultPin ? '<p class="hint">First time? The PIN is <b>1234</b>. Change it in Settings after login.</p>' : ''}
-      ${a ? '' : '<p class="hint">Login to download your membership card and see your payment receipts.</p>'}
+      ${a ? '' : '<p class="hint">Login to download your membership card and see your payment receipts. Members outside India: if it asks, type your number with the country code.</p>'}
     </div>
     <p class="hint w">Install as app — Android: Chrome menu ⋮ → Add to Home screen. iPhone: Safari Share → Add to Home Screen.</p>
   </div>`;
@@ -87,7 +90,7 @@ const VIEWS = {
       <div class="card"><h2>Fee pending — ${mLabel(m)}</h2>
       ${!S.members.length ? `<div class="empty">No members yet.<br><br><button class="btn" onclick="go('members');openMemberForm()">+ Add first member</button></div>`
         : !pending.length ? '<div class="empty">Everyone has paid this month 🎉</div>'
-        : pending.map(x => `<div class="row">${avatar(x)}<div class="grow"><div class="t">${esc(x.name)}</div><div class="s">${x.code} · ${x.phone}</div></div>
+        : pending.map(x => `<div class="row">${avatar(x)}<div class="grow"><div class="t">${esc(x.name)}</div><div class="s">${x.code} · ${ph(x)}</div></div>
           <a class="btn sm ghost" target="_blank" rel="noopener" href="${wa(x.phone, remindText(x))}">Remind</a><button class="btn sm" onclick="openPay('${x.id}')">Collect</button></div>`).join('')}</div>`;
   },
   members() {
@@ -125,7 +128,7 @@ const VIEWS = {
     const m = S.me;
     return `<div class="card"><div id="cardbox" class="empty">Preparing your card…</div>
       <div class="btns"><button class="btn" onclick="saveCanvas()">⬇ Download card</button>${CAN_SHARE ? '<button class="btn ghost" onclick="shareCanvas()">Share</button>' : ''}</div></div>
-      <div class="card"><h2>My details</h2><div class="kv"><span>Member ID</span><b>${m.code}</b></div><div class="kv"><span>Role</span><b>${esc(m.role || 'Member')}</b></div><div class="kv"><span>Mobile</span><b>${m.phone}</b></div>
+      <div class="card"><h2>My details</h2><div class="kv"><span>Member ID</span><b>${m.code}</b></div><div class="kv"><span>Role</span><b>${esc(m.role || 'Member')}</b></div><div class="kv"><span>Mobile</span><b>${ph(m)}</b></div>
       <div class="kv"><span>Blood group</span><b>${esc(m.blood || '—')}</b></div><div class="kv"><span>Member since</span><b>${dLabel(m.joined)}</b></div><div class="kv"><span>Address</span><b>${esc(m.address || '—')}</b></div></div>`;
   },
   pay() {
@@ -141,7 +144,7 @@ const payRows = list => [...list].sort((a, b) => b.month.localeCompare(a.month))
 function memberList() {
   const paid = paidSet(curMonth()), k = q.toLowerCase().trim();
   const list = S.members.filter(m => !k || (m.name + ' ' + m.code + ' ' + m.phone).toLowerCase().includes(k)).sort((a, b) => a.name.localeCompare(b.name));
-  return list.length ? list.map(m => `<div class="row tap" onclick="openMember('${m.id}')">${avatar(m)}<div class="grow"><div class="t">${esc(m.name)}</div><div class="s">${m.code} · ${esc(m.role || 'Member')} · ${m.phone}</div></div><span class="pill ${paid.has(m.id) ? 'ok' : 'due'}">${paid.has(m.id) ? 'Paid' : 'Due'}</span></div>`).join('')
+  return list.length ? list.map(m => `<div class="row tap" onclick="openMember('${m.id}')">${avatar(m)}<div class="grow"><div class="t">${esc(m.name)}</div><div class="s">${m.code} · ${ph(m)}${m.role && m.role !== 'Member' ? ' · ' + esc(m.role) : ''}</div></div><span class="pill ${paid.has(m.id) ? 'ok' : 'due'}">${paid.has(m.id) ? 'Paid' : 'Due'}</span></div>`).join('')
     : `<div class="empty">${S.members.length ? 'No member matches your search.' : 'No members yet. Tap “+ Add”.'}</div>`;
 }
 
@@ -149,18 +152,19 @@ function memberList() {
 function openMember(id) {
   const m = S.members.find(x => x.id === id); if (!m) return;
   const pays = S.payments.filter(p => p.memberId === id);
-  showModal('Member', `<div style="display:flex;gap:14px;align-items:center;margin:6px 0 12px">${avatar(m, 'lg')}<div><div style="font-size:19px;font-weight:700">${esc(m.name)}</div><div style="color:var(--p2);font-weight:600">${esc(m.role || 'Member')}</div><div class="s" style="color:var(--mut)">${m.code} · <a href="tel:${m.phone}">${m.phone}</a></div></div></div>
+  showModal('Member', `<div style="display:flex;gap:14px;align-items:center;margin:6px 0 12px">${avatar(m, 'lg')}<div><div style="font-size:19px;font-weight:700">${esc(m.name)}</div><div style="color:var(--p2);font-weight:600">${esc(m.role || 'Member')}</div><div class="s" style="color:var(--mut)">${m.code} · <a href="tel:+${m.phone}">${ph(m)}</a></div></div></div>
     <div class="kv"><span>Blood group</span><b>${esc(m.blood || '—')}</b></div><div class="kv"><span>Member since</span><b>${dLabel(m.joined)}</b></div><div class="kv"><span>Address</span><b>${esc(m.address || '—')}</b></div><div class="kv"><span>Total paid</span><b>${fmt(sum(pays))}</b></div>
     <div class="btns" style="margin:14px 0 8px"><button class="btn" onclick="openPay('${id}')">Collect fee</button><button class="btn ghost" onclick="openCard('${id}')">Membership card</button></div>
     <div class="btns"><button class="btn ghost" onclick="openMemberForm('${id}')">Edit</button><button class="btn red" onclick="delMember('${id}')">Delete</button></div>
     <h2 style="margin-top:16px;font-size:15px">Payments</h2>${payRows(pays) || '<div class="empty">No payments yet.</div>'}`);
 }
 function openMemberForm(id) {
-  const m = S.members.find(x => x.id === id) || { name: '', phone: '', role: 'Member', address: '', blood: '', joined: today() };
+  const m = S.members.find(x => x.id === id) || { name: '', cc: '91', phone: '', role: 'Member', address: '', blood: '', joined: today() };
+  const cc = m.cc || '91';
   formPhoto = undefined;
   showModal(id ? 'Edit member' : 'Add member', `<form onsubmit="saveMember(event,'${id || ''}')">
     <label for="f_name">Full name</label><input id="f_name" value="${esc(m.name)}" autocomplete="off" required>
-    <label for="f_phone">Mobile number (WhatsApp)</label><input id="f_phone" type="tel" inputmode="numeric" value="${esc(m.phone)}" placeholder="10 digits" required>
+    <label for="f_phone">WhatsApp / mobile number</label><div class="two"><div style="flex:0 0 42%"><select id="f_cc" aria-label="Country code" onchange="pickCc(this)">${(COUNTRIES.some(c => c[0] === cc) ? COUNTRIES : [[cc, 'Other'], ...COUNTRIES]).map(c => `<option value="${c[0]}" ${c[0] === cc ? 'selected' : ''}>${c[1]} +${c[0]}</option>`).join('')}<option value="other">Other country…</option></select></div><div><input id="f_phone" type="tel" inputmode="numeric" value="${esc(m.phone.slice(m.phone && m.cc ? m.cc.length : 0))}" placeholder="Number without country code" required></div></div>
     <label for="f_role">Role in club</label><input id="f_role" list="roles" value="${esc(m.role || 'Member')}" autocomplete="off" placeholder="Choose or type a role">
     <datalist id="roles">${['President', 'Vice President', 'Secretary', 'Joint Secretary', 'Treasurer', 'Committee Member', 'Coach', 'Captain', 'Player', 'Member'].map(r => `<option value="${r}">`).join('')}</datalist>
     <div class="two"><div><label for="f_blood">Blood group</label><select id="f_blood">${['', 'A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(b => `<option ${b === m.blood ? 'selected' : ''}>${b}</option>`).join('')}</select></div>
@@ -173,7 +177,7 @@ async function pickPhoto(inp) { if (inp.files[0]) formPhoto = await run(() => re
 function saveMember(e, id) {
   e.preventDefault();
   run(async () => {
-    const body = { name: val('f_name'), phone: val('f_phone'), role: val('f_role'), blood: val('f_blood'), joined: val('f_joined'), address: val('f_addr'), photo: formPhoto };
+    const body = { name: val('f_name'), cc: val('f_cc'), phone: val('f_phone'), role: val('f_role'), blood: val('f_blood'), joined: val('f_joined'), address: val('f_addr'), photo: formPhoto };
     await api(id ? 'PUT' : 'POST', 'members' + (id ? '/' + id : ''), body);
     closeModal(); await load(); toast('Member saved'); if (id) openMember(id);
   });
@@ -278,9 +282,9 @@ async function makeCard(m) {
   x.restore(); x.textAlign = 'left'; x.textBaseline = 'top';
   x.fillStyle = '#fff'; fit(x, m.name, 356, 192, 600, 50);
   x.fillStyle = '#ffd166'; fit(x, (m.role || 'Member').toUpperCase(), 356, 250, 600, 28, '700');
-  [['MEMBER ID', m.code, 356, 306], ['MOBILE', m.phone, 620, 306], ['BLOOD GROUP', m.blood || '—', 356, 396], ['MEMBER SINCE', dLabel(m.joined), 620, 396]].forEach(([k, v, l, t]) => {
+  [['MEMBER ID', m.code, 356, 306], ['MOBILE', ph(m), 620, 306], ['BLOOD GROUP', m.blood || '—', 356, 396], ['MEMBER SINCE', dLabel(m.joined), 620, 396]].forEach(([k, v, l, t]) => {
     x.fillStyle = 'rgba(255,255,255,.72)'; x.font = `600 20px ${FONT}`; x.fillText(k, l, t);
-    x.fillStyle = '#fff'; x.font = `700 34px ${FONT}`; x.fillText(v, l, t + 28);
+    x.fillStyle = '#fff'; fit(x, v, l, t + 28, 336, 34);
   });
   x.fillStyle = 'rgba(255,255,255,.2)'; x.fillRect(56, 518, W - 112, 2);
   x.fillStyle = 'rgba(255,255,255,.85)'; fit(x, S.settings.tagline || 'Valid while monthly membership is active', 56, 546, 900, 24, '500');
@@ -310,7 +314,7 @@ async function openCard(id) {
   const m = S.members.find(x => x.id === id); curCanvas = await makeCard(m); curName = `Membership-Card-${m.code}.png`;
   showModal('Membership card', `<img class="full" src="${curCanvas.toDataURL('image/png')}" alt="Membership card of ${esc(m.name)}">
     <div class="btns"><button class="btn" onclick="saveCanvas()">⬇ Download</button>${CAN_SHARE ? '<button class="btn ghost" onclick="shareCanvas()">Share</button>' : ''}</div>
-    <p class="hint">${esc(m.name)} can also download this card by logging in with mobile number ${m.phone}.</p>`);
+    <p class="hint">${esc(m.name)} can also download this card by logging in with mobile number ${ph(m)}.</p>`);
 }
 function download(href, name) { const a = document.createElement('a'); a.href = href; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
 function saveCanvas() { if (curCanvas) download(curCanvas.toDataURL('image/png'), curName); }

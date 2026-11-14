@@ -71,16 +71,16 @@ const delImage = p => {
 };
 const pubSettings = () => ({ clubName: db.settings.clubName, tagline: db.settings.tagline, fee: db.settings.fee, upi: db.settings.upi, storage: CLOUD ? 'cloud' : 'local' });
 const str = (v, max = 200) => String(v ?? '').trim().slice(0, max);
-const phone10 = v => String(v || '').replace(/\D/g, '').slice(-10);
+const digits = v => String(v || '').replace(/\D/g, '');
 const today = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10); // IST
 const bad = msg => Object.assign(new Error(msg), { code: 400 });
 
 async function memberFields(b, existing) {
-  const name = str(b.name, 80), phone = phone10(b.phone);
+  const name = str(b.name, 80), cc = digits(b.cc).replace(/^0+/, '').slice(0, 4) || '91', local = digits(b.phone).replace(/^0+/, ''), phone = cc + local;
   if (!name) throw bad('Name is required');
-  if (phone.length !== 10) throw bad('Enter a 10-digit mobile number');
+  if (cc === '91' ? local.length !== 10 : (local.length < 6 || local.length > 12)) throw bad(cc === '91' ? 'Enter a 10-digit mobile number' : 'Enter a valid mobile number (without the country code)');
   if (db.members.some(m => m.phone === phone && m !== existing)) throw bad('This mobile number is already registered');
-  const o = { name, phone, role: str(b.role, 30) || 'Member', address: str(b.address), blood: str(b.blood, 5), joined: /^\d{4}-\d{2}-\d{2}$/.test(b.joined) ? b.joined : today() };
+  const o = { name, cc, phone, role: str(b.role, 30) || 'Member', address: str(b.address), blood: str(b.blood, 5), joined: /^\d{4}-\d{2}-\d{2}$/.test(b.joined) ? b.joined : today() };
   if (typeof b.photo === 'string' && b.photo.startsWith('data:')) { o.photo = await saveImage(b.photo, 'm_'); if (existing) delImage(existing.photo); }
   else if (b.photo === '' && existing) { delImage(existing.photo); o.photo = ''; }
   return o;
@@ -95,7 +95,11 @@ async function apiHandler(req, res, url) {
       if (hash(str(b.pin, 20)) !== db.settings.pinHash) { await new Promise(r => setTimeout(r, 800)); throw bad('Wrong PIN'); }
       return send(res, 200, { token: sign({ role: 'admin', exp }) });
     }
-    const m = db.members.find(x => x.phone === phone10(b.phone));
+    const d = digits(b.phone).replace(/^0+/, '');
+    if (d.length < 7) throw bad('Enter your registered mobile number');
+    const hits = db.members.filter(x => x.phone === d || (x.phone.endsWith(d) && x.phone.length - d.length <= 4));
+    if (hits.length > 1) throw bad('Please enter your number with the country code (for example 91XXXXXXXXXX)');
+    const m = hits[0];
     if (!m) throw bad('This mobile number is not registered. Please contact the club admin.');
     return send(res, 200, { token: sign({ role: 'member', id: m.id, exp }) });
   }
@@ -176,6 +180,9 @@ loadDb().then(async d => {
   const fix = c => { const m = /^M(\d+)$/.exec(c || ''); return m ? 'FC' + (100 + +m[1]) : c; };
   let changed = !d;
   for (const x of db.members) if (fix(x.code) !== x.code) { x.code = fix(x.code); changed = true; }
+  // one-time change: old 10-digit Indian numbers -> full international numbers (country code + number)
+  for (const x of db.members) if (!x.cc) { x.cc = '91'; if (x.phone.length === 10) x.phone = '91' + x.phone; changed = true; }
+  for (const x of db.payments) if (x.phone && x.phone.length === 10) { x.phone = '91' + x.phone; changed = true; }
   for (const x of db.payments) if (fix(x.memberCode) !== x.memberCode) { x.memberCode = fix(x.memberCode); changed = true; }
   if (changed) await save();
   server.listen(PORT, '0.0.0.0', () => console.log(`Club app running on port ${PORT} - storage: ${CLOUD ? 'Supabase cloud (' + BUCKET + ')' : 'local data folder'}`));
