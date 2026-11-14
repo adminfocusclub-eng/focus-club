@@ -79,7 +79,9 @@ function render() {
 
 const totals = () => { const fees = sum(S.payments), inc = fees + sum(S.transactions.filter(t => t.type === 'income')), exp = sum(S.transactions.filter(t => t.type === 'expense')); return { fees, inc, exp, bal: inc - exp }; };
 const paidSet = m => new Set(S.payments.filter(p => p.month === m).map(p => p.memberId));
-const remindText = m => `Hello ${m.name}, this is a reminder from *${S.settings.clubName}*. Your monthly membership fee of ${fmt(S.settings.fee)} for ${mLabel(curMonth())} is pending. Thank you!`;
+const ML_MON = ['ജനുവരി', 'ഫെബ്രുവരി', 'മാർച്ച്', 'ഏപ്രിൽ', 'മേയ്', 'ജൂൺ', 'ജൂലൈ', 'ഓഗസ്റ്റ്', 'സെപ്റ്റംബർ', 'ഒക്ടോബർ', 'നവംബർ', 'ഡിസംബർ'];
+const mlMonth = m => ML_MON[+m.slice(5, 7) - 1] + ' ' + m.slice(0, 4);
+const remindText = m => `പ്രിയ ${m.name},\n\n*${S.settings.clubName}* ൽ നിന്നുള്ള ഓർമ്മപ്പെടുത്തൽ.\n${mlMonth(curMonth())} മാസത്തെ അംഗത്വ ഫീസ് ${fmt(S.settings.fee)} അടയ്ക്കാൻ ബാക്കിയുണ്ട്. ദയവായി എത്രയും വേഗം അടയ്ക്കുക.\n\nനന്ദി! 🙏`;
 
 const VIEWS = {
   home() {
@@ -151,7 +153,7 @@ function memberList() {
 /* ---------- Bulk reminders ---------- */
 let remList = [], remIdx = 0;
 const pendingNow = () => { const paid = paidSet(curMonth()); return S.members.filter(x => !paid.has(x.id)).sort((a, b) => a.name.localeCompare(b.name)); };
-const groupText = names => `*${S.settings.clubName}*\nMonthly membership reminder - ${mLabel(curMonth())}\n\n` + (names ? `The fee of ${fmt(S.settings.fee)} is pending for:\n${pendingNow().map((x, i) => `${i + 1}. ${x.name} (${x.code})`).join('\n')}\n\nKindly pay at the earliest.` : `Members who have not yet paid the monthly fee of ${fmt(S.settings.fee)} are requested to pay at the earliest.`) + ' Thank you! 🙏';
+const groupText = names => `*${S.settings.clubName}*\nപ്രതിമാസ അംഗത്വ ഫീസ് ഓർമ്മപ്പെടുത്തൽ - ${mlMonth(curMonth())}\n\n` + (names ? `താഴെ പറയുന്ന അംഗങ്ങളുടെ ${fmt(S.settings.fee)} ഫീസ് അടയ്ക്കാൻ ബാക്കിയുണ്ട്:\n${pendingNow().map((x, i) => `${i + 1}. ${x.name} (${x.code})`).join('\n')}\n\nദയവായി എത്രയും വേഗം അടയ്ക്കുക.` : `ഈ മാസത്തെ അംഗത്വ ഫീസ് ${fmt(S.settings.fee)} ഇതുവരെ അടയ്ക്കാത്ത അംഗങ്ങൾ ദയവായി എത്രയും വേഗം അടയ്ക്കണമെന്ന് അഭ്യർത്ഥിക്കുന്നു.`) + '\n\nനന്ദി! 🙏';
 function openRemindAll() {
   const n = pendingNow().length;
   showModal('Remind all — ' + n + ' pending', `<h3 style="margin:10px 0 4px;font-size:15px">1. One message to your group or broadcast list</h3>
